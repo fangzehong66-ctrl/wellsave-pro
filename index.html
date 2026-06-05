@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wellsave Pro - 超市每日 point cash 结算对账系统</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #cbd5e1; /* 舒适的中灰色背景，最大化提高纸张质感对比度 */
+            overflow: hidden; /* 🌟 强制禁止整页产生上下或左右滚动条，所有内容必须在一屏内完满呈现 */
+            height: 100vh;
+        }
+        
+        .font-mono {
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+        }
+
+        /* 🌟 极致锁定：针对 1024x768 屏幕，表头和总计行永久 Sticky 不透明锁定，消除拖动闪烁与重影 */
+        thead, thead tr, thead th {
+            position: sticky !important;
+            top: 0;
+            background-color: #cbd5e1 !important; /* 与外层保持高度高对比底色 */
+            z-index: 30 !important;
+        }
+
+        tfoot, tfoot tr, tfoot td {
+            position: sticky !important;
+            bottom: 0;
+            background-color: #f1f5f9 !important; /* 纯色 slate-100 */
+            z-index: 30 !important;
+            box-shadow: 0 -3px 6px rgba(0,0,0,0.08); /* 边缘阴影隔离 */
+        }
+
+        /* 优化高密度输入框样式 - 略微压矮高度至28px以适应 1024x768 屏幕，但保持 16px 醒目字号 */
+        .table-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .table-input {
+            width: 100%;
+            background-color: #ffffff;
+            border: 2px solid #475569; /* 加粗边框至 slate-600 */
+            border-radius: 5px;
+            padding: 1px 4px;
+            color: #0f172a; 
+            font-size: 16px !important; /* 🌟 强力保持醒目大字号 */
+            font-weight: 800 !important; /* 极粗字体 */
+            transition: all 0.1s ease-in-out;
+            text-align: right;
+            height: 28px; /* 压矮至 28px */
+        }
+        
+        .table-input:focus {
+            background-color: #ffffff;
+            border-color: #10b981;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+        }
+
+        /* 录入行高亮追踪特效 */
+        .tr-active {
+            background-color: rgba(16, 185, 129, 0.15) !important;
+        }
+        .tr-active .sticky-col-left {
+            background-color: #d1fae5 !important; 
+        }
+        .tr-active .sticky-col-right {
+            background-color: #d1fae5 !important; 
+        }
+
+        /* 冻结锁定列 */
+        .sticky-col-left {
+            position: sticky !important;
+            left: 0;
+            z-index: 10;
+            background-color: #e2e8f0 !important; /* 纯色，100%不透明 */
+            border-right: 2px solid #cbd5e1 !important;
+        }
+        .sticky-col-right {
+            position: sticky !important;
+            right: 0;
+            z-index: 10;
+            background-color: #f8fafc !important; /* 纯色，100%不透明 */
+            border-left: 2px solid #cbd5e1 !important;
+        }
+
+        /* 隐藏数字输入框默认上下箭头 */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        /* 纤细优雅滚动条 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #e2e8f0;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 3px;
+        }
+
+        /* 打印样式 */
+        @media print {
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                overflow: visible !important;
+            }
+            header, .mb-4, button, label {
+                display: none !important; 
+            }
+            .w-full {
+                width: 100% !important;
+                padding: 0 !important;
+            }
+            table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                color: #000000 !important;
+            }
+            th, td {
+                border: 1px solid #999999 !important;
+                padding: 4px !important;
+            }
+        }
+    </style>
+    <!-- 智能 LOGO 备用加载与高亮样式声明 -->
+    <script>
+        window.fallbackLogo = function() {
+            var container = document.getElementById('logo-container');
+            if (container) {
+                container.innerHTML = '<div class="p-1 bg-slate-200 text-slate-700 rounded-lg"><i data-lucide="store" class="w-5 h-5"></i></div>';
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons(); 
+                }
+            }
+        };
+    </script>
+</head>
+<body class="text-slate-800 h-screen flex flex-col justify-between select-none">
+
+    <!-- 🌟 全屏安全登录锁屏闸口，阻断一切非授权设备访问（最高层级 z-[100]） -->
+    <div id="login-overlay" class="fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center">
+        <div class="bg-white border border-slate-300 p-8 rounded-2xl max-w-sm w-full mx-4 shadow-2xl text-center">
+            <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+                <i data-lucide="shield-check" class="w-8 h-8"></i>
+            </div>
+            <h2 class="text-xl font-black text-slate-900 mb-1">Wellsave Pro 对账中心</h2>
+            <p class="text-xs text-slate-500 mb-6">请输入专属对账凭证解锁财务工作台</p>
+            
+            <div class="space-y-4 text-left">
+                <div>
+                    <label class="block text-xs font-black text-slate-700 mb-1">对账账号</label>
+                    <input type="text" id="login-username" placeholder="请输入对账账号" class="w-full px-3 py-2 border-2 border-slate-300 rounded-lg text-sm font-semibold outline-none focus:border-emerald-500 font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-slate-700 mb-1">验证密码</label>
+                    <input type="password" id="login-password" placeholder="请输入密码" class="w-full px-3 py-2 border-2 border-slate-300 rounded-lg text-sm font-semibold outline-none focus:border-emerald-500 font-mono">
+                </div>
+                
+                <div id="login-error-msg" class="text-xs text-rose-600 font-bold hidden bg-rose-50 p-2.5 rounded border border-rose-200">
+                    ⚠️ 凭证有误！请输入正确的对账账号与密码。
+                </div>
+
+                <button id="btn-login-submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-black transition-all shadow-md">
+                    验证解锁系统
+                </button>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-6 font-bold uppercase tracking-wider">
+                Supermarket Financial System v3.5
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. 顶部状态导航栏 - 极矮扁平化以最大化释放垂直核算空间 -->
+    <header class="bg-slate-100 border-b border-slate-300 sticky top-0 z-50 px-6 py-2 shadow-sm shrink-0">
+        <div class="w-full mx-auto flex flex-col xl:flex-row items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <!-- 智能 LOGO 容器 -->
+                <div id="logo-container" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg overflow-hidden border border-slate-300">
+                    <img src="https://picui.ogmua.cn/s1/2026/06/04/6a218467e1e7b.webp" alt="Wellsave Pro Logo" class="w-full h-full object-cover" id="logo-img" onerror="fallbackLogo()">
+                </div>
+                <div>
+                    <h1 class="text-lg font-black tracking-wider text-slate-900 leading-none">Wellsave Pro 对账系统</h1>
+                    <span class="text-[10px] text-slate-500 font-semibold leading-none"> point cash 每日闭店一屏核算面板</span>
+                </div>
+            </div>
+
+            <!-- 控制面板组件 -->
+            <div class="flex flex-wrap items-center gap-2 text-xs font-black">
+                <!-- S2S 费率 -->
+                <div class="flex items-center gap-1 bg-slate-200/80 border border-slate-300 px-2 py-0.5 rounded" title="Shop2Shop 交易手续费扣除比例">
+                    <span class="text-[11px] text-amber-900 font-black flex items-center gap-0.5"><i data-lucide="percent" class="w-3.5 h-3.5"></i> S2S费率:</span>
+                    <input type="number" id="s2s-fee-rate" value="0.85" step="0.01" min="0" max="100" class="w-12 bg-white border border-slate-300 rounded text-center text-xs text-emerald-700 font-mono font-bold focus:outline-none">
+                    <span class="text-[10px] text-slate-700 font-bold">%</span>
+                </div>
+
+                <!-- 页面切换导航标签 (经典Tab) -->
+                <div class="flex bg-slate-100 border border-slate-300 p-0.5 rounded-lg text-xs" id="tab-toggle-container">
+                    <button id="tab-reconcile-btn" class="px-4 py-2 rounded-md bg-white text-slate-900 font-bold shadow-sm border-2 border-slate-500 transition-all flex items-center gap-1 text-[13px]">
+                        <i data-lucide="file-check-2" class="w-3.5 h-3.5 text-emerald-600"></i> 结算主表
+                    </button>
+                    <button id="tab-collection-btn" class="px-4 py-2 rounded-md bg-white text-slate-900 font-bold shadow-sm border-2 border-slate-500 transition-all flex items-center gap-1 text-[13px]">
+                        <i data-lucide="coins" class="w-3.5 h-3.5"></i> 解缴子表
+                    </button>
+                    <button id="tab-charts-btn" class="px-4 py-2 rounded-md bg-white text-slate-900 font-bold shadow-sm border-2 border-slate-500 transition-all flex items-center gap-1 text-[13px]">
+                        <i data-lucide="line-chart" class="w-3.5 h-3.5"></i> 经营分析
+                    </button>
+                </div>
+
+                <!-- 业务日期 -->
+                <div class="flex items-center gap-1 bg-slate-200/80 border border-slate-300 px-2 py-0.5 rounded">
+                    <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-600"></i>
+                    <input type="date" id="accounting-date" class="bg-transparent text-sm text-slate-800 outline-none cursor-pointer font-mono font-black">
+                </div>
+
+                <!-- 智能未营业行过滤控制 -->
+                <label class="flex items-center gap-1 bg-slate-200/80 border border-slate-300 px-2 py-0.5 rounded cursor-pointer select-none text-[11px] font-bold text-slate-700" title="智能折叠今天不营业的收银台">
+                    <input type="checkbox" id="chk-hide-idle" class="w-3.5 h-3.5 rounded accent-emerald-600 bg-white border border-slate-300">
+                    <span>隐藏空机</span>
+                </label>
+
+                <!-- 🌟 协同控制中心（登录、退出与云同步状态） -->
+                <div class="flex items-center gap-1.5 border-l border-slate-300 pl-2">
+                    <button id="btn-cloud-status" class="flex items-center gap-1 px-3 py-1 bg-slate-200 hover:bg-slate-300 border border-slate-300 rounded text-xs font-black text-slate-700 transition-all">
+                        <i data-lucide="cloud-off" class="w-3.5 h-3.5" id="cloud-icon"></i>
+                        <span id="cloud-status-text">离线模式</span>
+                    </button>
+                    <button id="btn-auth-action" class="flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-black transition-all">
+                        <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+                        <span id="auth-btn-text">锁定系统</span>
+                    </button>
+                </div>
+
+                <!-- 智能交接班 -->
+                <div class="flex items-center gap-1 border-l border-slate-300 pl-2">
+                    <button id="btn-roll-forward" class="flex items-center gap-1 px-2.5 py-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-555 text-white font-bold rounded text-xs transition-all shadow-sm" title="【一键交接班】：将今日底数直接结转到明天的昨日留底，并自动跳转至明天的账单。">
+                        <i data-lucide="arrow-right-left" class="w-3.5 h-3.5"></i> 结转明日
+                    </button>
+                    <button id="btn-clear-daily" class="flex items-center gap-1 px-3 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-300 rounded text-sm font-black transition-all" title="【清空重输】：一键清除今日所有营业、解缴、手续费、Absa和彩票数据，仅保留留底。">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 清空今日
+                    </button>
+                </div>
+
+                <!-- 备份、保存和导出 -->
+                <div class="flex items-center gap-1 border-l border-slate-300 pl-2 text-xs">
+                    <!-- 打印 A4 -->
+                    <button id="btn-print-report" class="flex items-center gap-1 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 border border-cyan-300 rounded px-2.5 py-1 transition-all" title="打印报表">
+                        <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <!-- JSON 备份 -->
+                    <button id="btn-backup-db" class="p-1 bg-slate-200 hover:bg-slate-300 text-amber-700 border border-slate-300 rounded" title="备份历史库">
+                        <i data-lucide="database" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <input type="file" id="input-restore-db" accept=".json" class="hidden">
+                    <button id="btn-restore-db" class="p-1 bg-slate-200 hover:bg-slate-300 text-amber-700 border border-slate-300 rounded" title="还原备份">
+                        <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i>
+                    </button>
+                    
+                    <button id="btn-save-data" class="flex items-center gap-1 px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded text-xs shadow-sm">
+                        <i data-lucide="save" class="w-3.5 h-3.5"></i> 保存
+                    </button>
+                    <button id="btn-export-csv" class="flex items-center gap-1 px-2.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 border border-slate-300 rounded text-xs transition-all">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> 导出CSV
+                    </button>
+                    <button id="btn-reset-demo" class="p-1 bg-red-100 hover:bg-red-200 text-red-600 border border-red-300 rounded" title="重置数据">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. 核心统计指示条 - 释放垂直高度，横向完全满格，文字显著加大 -->
+    <section class="w-full px-6 pt-1.5 shrink-0">
+        <div class="grid grid-cols-4 gap-2 bg-slate-100/90 border border-slate-300 p-1.5 rounded-lg text-sm">
+            <div class="flex items-center justify-between px-3 border-r border-slate-250">
+                <span class="text-slate-700 font-black text-xs md:text-sm">POS销售总额:</span>
+                <span id="stat-total-revenue" class="font-black font-mono text-blue-700 text-[14px]">R 0.00</span>
+            </div>
+            <div class="flex items-center justify-between px-3 border-r border-slate-250">
+                <span class="text-slate-700 font-black text-xs md:text-sm">实收现金解缴:</span>
+                <span id="stat-total-cash" class="font-black font-mono text-emerald-700 text-[14px]">R 0.00</span>
+            </div>
+            <div class="flex items-center justify-between px-3 border-r border-slate-250">
+                <span class="text-slate-700 font-black text-xs md:text-sm">S2S已扣手续费 (0.85%):</span>
+                <span id="stat-total-s2s-fee" class="font-black font-mono text-amber-700 text-[14px]">R 0.00</span>
+            </div>
+            <div class="flex items-center justify-between px-3">
+                <span class="text-slate-700 font-black text-xs md:text-sm">全场对账差额:</span>
+                <div class="flex items-center gap-1.5">
+                    <span id="stat-variance-icon"></span>
+                    <span id="stat-total-variance" class="font-black font-mono text-slate-800 text-[14px]">R 0.00</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. 主对账工作区 - 双页面自适应锁定一屏高度，横向空间全满 -->
+    <main class="flex-1 w-full px-6 py-2 flex flex-col min-h-0 overflow-hidden">
+        
+        <!-- 页面一：结算主表 (默认展示) -->
+        <section id="section-reconcile" class="flex-1 bg-slate-50 border-2 border-slate-300 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">
+            <div class="px-3 py-1.5 bg-slate-200 border-b border-slate-300 flex items-center justify-between shrink-0">
+                <span class="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                    <i data-lucide="file-check-2" class="w-4 h-4 text-emerald-600"></i> Wellsave Pro 每日结算主表
+                </span>
+                <span class="text-xs text-slate-600 font-black">按回车极速穿梭，100%一屏完全免上下滑动</span>
+            </div>
+            
+            <div class="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar min-h-0">
+                <table class="w-full text-left text-xs table-layout-fixed">
+                    <thead class="bg-slate-200 border-b-2 border-slate-300 text-slate-800 font-black uppercase sticky top-0 z-20 text-[14px]">
+                        <tr>
+                            <th class="px-2 py-2 text-center w-16 sticky-col-left bg-slate-200 border-r border-slate-300">机号</th>
+                            <th class="px-1.5 py-2 text-right">昨日留底</th>
+                            <th class="px-1.5 py-2 text-right">营业</th>
+                            <th class="px-2 py-2 text-right bg-blue-100 text-blue-900 font-bold w-20">小计</th>
+                            <th class="px-1.5 py-2 text-right">彩票</th>
+                            <th class="px-1.5 py-2 text-right bg-amber-100 text-amber-955 font-black">S2S刷卡</th>
+                            <th class="px-1.5 py-2 text-right">Absa刷卡</th>
+                            <th class="px-1.5 py-2 text-right">今日底数</th>
+                            <th class="px-1.5 py-2 text-right">昨日加钞</th>
+                            <th class="px-1.5 py-2 text-right text-slate-600 font-black">今日总计</th>
+                            <th class="px-2 py-2 text-right bg-slate-200/60 text-slate-800 font-black">现金收款</th>
+                            <th class="px-2 py-2 text-right bg-emerald-100 text-emerald-950 font-black">收款合计</th>
+                            <th class="px-3 py-2 text-right font-black sticky-col-right bg-slate-200 border-l border-slate-300 w-22">结算</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reconcile-tbody" class="divide-y divide-slate-300 font-mono text-[14px]">
+                        <!-- 动态加载 -->
+                    </tbody>
+                    <tfoot id="reconcile-tfoot" class="border-t-2 border-slate-300 shrink-0">
+                        <!-- 汇总 -->
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <!-- 页面二：每日收款分批解缴明细 (默认隐藏) -->
+        <section id="section-collection" class="flex-1 bg-slate-50 border-2 border-slate-300 rounded-xl shadow-sm flex flex-col overflow-hidden h-full hidden">
+            <div class="px-3 py-1.5 bg-slate-200 border-b border-slate-300 flex items-center justify-between shrink-0">
+                <span class="text-sm font-black text-slate-855 flex items-center gap-1.5">
+                    <i data-lucide="coins" class="w-4 h-4 text-blue-600"></i> 收款每日解缴现金表
+                </span>
+                <span class="text-xs text-slate-655 font-black">修改子表数值自动滚动同步至主表</span>
+            </div>
+
+            <div class="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar min-h-0">
+                <table class="w-full text-left text-sm table-layout-fixed">
+                    <thead class="bg-slate-250 border-b-2 border-slate-300 text-slate-855 font-black uppercase sticky top-0 z-20 text-[14px]">
+                        <tr>
+                            <th class="px-2 py-2 text-center w-16 sticky-col-left bg-slate-200 border-r border-slate-300">机号</th>
+                            <th class="px-1.5 py-2 text-right">收款 1</th>
+                            <th class="px-1.5 py-2 text-right">收款 2</th>
+                            <th class="px-1.5 py-2 text-right">收款 3</th>
+                            <th class="px-1.5 py-2 text-right">收款 4</th>
+                            <th class="px-1.5 py-2 text-right">收款 5</th>
+                            <th class="px-2 py-2 bg-slate-200 text-emerald-800 text-right pr-3 font-bold sticky-col-right bg-slate-200 border-l border-slate-200 w-28">现金汇总</th>
+                        </tr>
+                    </thead>
+                    <tbody id="collection-tbody" class="divide-y divide-slate-300 font-mono text-[14px]">
+                        <!-- 动态加载 -->
+                    </tbody>
+                    <tfoot id="collection-tfoot" class="border-t-2 border-slate-300 shrink-0">
+                        <!-- 汇总 -->
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <!-- 页面三：经营分析大图表 (默认隐藏) -->
+        <section id="section-charts" class="flex-1 bg-slate-50 border-2 border-slate-300 rounded-xl p-4 flex flex-col overflow-hidden h-full hidden">
+            <div class="flex items-center justify-between border-b border-slate-300 pb-1.5 mb-2 shrink-0">
+                <h3 class="text-sm font-black text-slate-855 flex items-center gap-1.5">
+                    <i data-lucide="line-chart" class="w-4 h-4 text-emerald-600"></i> Wellsave Pro 经营分析图表
+                </h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto custom-scrollbar pr-1 flex-1">
+                <!-- 各收银机营业销售对比排行 -->
+                <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+                    <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-600"></i> 收银台今日销售排行 (R)
+                    </h4>
+                    <div class="space-y-2.5" id="charts-ranking-container"></div>
+                </div>
+                <!-- 支付渠道构成占比 -->
+                <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h4 class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                            <i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i> 超市支付渠道实收占比
+                        </h4>
+                        <div class="space-y-3.5 pt-1" id="charts-payment-shares"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 确认操作对话模态框 -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-white border border-slate-200 p-6 rounded-2xl max-w-sm w-full text-center shadow-xl">
+            <div id="confirm-icon-box" class="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-indigo-100 text-indigo-650">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <h3 id="confirm-title" class="text-base font-bold text-slate-900 mb-2">确认操作吗？</h3>
+            <p id="confirm-desc" class="text-xs text-slate-500 mb-5 leading-relaxed">此操作不可撤销，请仔细确认。</p>
+            <div class="flex gap-3">
+                <button id="btn-confirm-cancel" class="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-700 transition-all">取消</button>
+                <button id="btn-confirm-ok" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-750 rounded-lg text-xs font-semibold text-white transition-all shadow-sm">确定执行</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示消息防崩浮动弹窗 -->
+    <div id="toast-message" class="fixed bottom-4 right-4 bg-white border-2 border-emerald-500 text-emerald-600 px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 translate-y-20 opacity-0 pointer-events-none transition-all duration-300 z-50">
+        <i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i>
+        <span id="toast-text" class="text-sm font-semibold">数据保存成功！</span>
+    </div>
+
+    <!-- 底部状态反馈 (一屏流占满) -->
+    <footer class="bg-slate-100 border-t border-slate-300 px-6 py-1.5 flex justify-between items-center text-xs text-slate-600 font-bold shrink-0">
+        <div>超市公式：小计 = 昨日留底 + 营业 + 昨日加钞 | 收款合计 = 现金收款 + S2S刷卡 + Absa刷卡 + 今日底数 + 彩票 | 结算 = 收款合计 - 小计</div>
+        <div class="flex items-center gap-1 font-bold text-emerald-700 text-xs">
+            <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping mr-1"></span>
+            Wellsave 双页面一屏对账系统就绪
+        </div>
+    </footer>
+
+    <!-- 🌟 云端同步和协同控制模块脚本 -->
+    <script type="module">
+        // 导入 Firebase SDK v11 CDN
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        // 1. 初始化环境变量
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'wellsave-pro-cloud';
+        let db = null;
+        let auth = null;
+        let isFirebaseReady = false;
+        let currentUser = null;
+        let cloudUnsubscribe = null;
+        let writeTimeout = null; // 🌟 智能写入去抖防抖定时器
+
+        // 检测环境并加载 Firebase
+        try {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                isFirebaseReady = true;
+                console.log("Firebase 协同云存储已就绪。");
+            }
+        } catch (e) {
+            console.warn("未能加载云端数据库，自动降级为单机本地存储模式。", e);
+        }
+
+        // 2. 初始化核心对账状态与本地底盘数据
+        var S2S_FEE_RATE = 0.85;
+        var isLocked = false; 
+        var hideIdle = false; 
+        var currentAction = null; 
+        var activeDate = "2026-06-04"; // 默认加载日期：昨天
+        var activeTab = "reconcile";
+
+        // 默认超市 6 月 4 日账目
+        var initialDataset = {
+            "2026-06-04": {
+                collections: {
+                    1: [30000, 5750, 0, 0, 0],
+                    2: [30000, 9170, 0, 0, 0],
+                    3: [30000, 9300, 0, 0, 0],
+                    4: [25000, 6400, 0, 0, 0],
+                    5: [25000, 5350, 0, 0, 0],
+                    6: [25000, 5000, 0, 0, 0],
+                    7: [25000, 3500, 0, 0, 0],
+                    8: [25000, 3950, 0, 0, 0],
+                    9: [5000, 450, 0, 0, 0],
+                    10: [4000, 350, 0, 0, 0],
+                    11: [0, 0, 0, 0, 0],
+                    12: [0, 0, 0, 0, 0]
+                },
+                reconciliations: {
+                    1: { prevFloat: 1868.00, revenue: 66707.00, lottery: 0, shop2shop: 10451.00, absa: 20210.40, currFloat: 2109.00, added: 0 },
+                    2: { prevFloat: 2553.50, revenue: 72114.00, lottery: 0, shop2shop: 14899.20, absa: 17601.20, currFloat: 2984.00, added: 0 },
+                    3: { prevFloat: 2267.00, revenue: 66754.00, lottery: 0, shop2shop: 14104.80, absa: 12287.20, currFloat: 3291.00, added: 0 },
+                    4: { prevFloat: 1872.00, revenue: 60605.00, lottery: 0, shop2shop: 13478.91, absa: 15381.20, currFloat: 2218.00, added: 0 },
+                    5: { prevFloat: 3495.00, revenue: 58603.00, lottery: 0, shop2shop: 9732.10, absa: 20288.50, currFloat: 1577.00, added: 0 },
+                    6: { prevFloat: 2771.00, revenue: 62783.00, lottery: 0, shop2shop: 13007.80, absa: 19677.30, currFloat: 2873.00, added: 0 },
+                    7: { prevFloat: 2473.50, revenue: 54519.00, lottery: 0, shop2shop: 14559.40, absa: 12017.80, currFloat: 1879.00, added: 0 },
+                    8: { prevFloat: 2394.50, revenue: 48472.00, lottery: 0, shop2shop: 8491.60, absa: 12109.80, currFloat: 1306.00, added: 0 },
+                    9: { prevFloat: 1282.00, revenue: 6939.00, lottery: 0, shop2shop: 1908.00, absa: 0, currFloat: 859.00, added: 0 },
+                    10: { prevFloat: 2602.00, revenue: 6361.00, lottery: 0, shop2shop: 2070.50, absa: 0, currFloat: 2490.00, added: 0 },
+                    11: { prevFloat: 1000.00, revenue: 0, lottery: 0, shop2shop: 0, absa: 0, currFloat: 1000.00, added: 0 },
+                    12: { prevFloat: 1000.00, revenue: 0, lottery: 0, shop2shop: 0, absa: 0, currFloat: 1000.00, added: 0 }
+                }
+            }
+        };
+
+        var dbLocal = JSON.parse(JSON.stringify(initialDataset));
+
+        // 从本地存储加载缓存
+        try {
+            var cached = localStorage.getItem('wellsave_pro_accounting_exact_db');
+            if (cached) {
+                dbLocal = JSON.parse(cached);
+            }
+        } catch (e) {
+            console.warn("读取本地持久化数据受限");
+        }
+
+        // 智能消息提示弹窗 (🌟 已作为 Module 内最顶级函数声明)
+        function showToast(text, isError) {
+            var toast = document.getElementById('toast-message');
+            var toastText = document.getElementById('toast-text');
+            if (!toast || !toastText) return;
+            toastText.innerText = text;
+            if (isError) {
+                toast.className = toast.className.replace('border-emerald-500', 'border-red-500');
+                toast.className = toast.className.replace('text-emerald-600', 'text-red-600');
+            } else {
+                toast.className = toast.className.replace('border-red-500', 'border-emerald-500');
+                toast.className = toast.className.replace('text-red-600', 'text-emerald-655');
+            }
+            toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+            setTimeout(function() {
+                toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+        // 确保特定日期的数据库实体已被初始化 (固定 12 台机)
+        function checkAndInitDateData(dateStr) {
+            if (!dbLocal[dateStr]) {
+                dbLocal[dateStr] = {
+                    collections: {},
+                    reconciliations: {}
+                };
+                for (var m = 1; m <= 12; m++) {
+                    dbLocal[dateStr].collections[m] = [0, 0, 0, 0, 0];
+                    dbLocal[dateStr].reconciliations[m] = {
+                        prevFloat: 0,
+                        revenue: 0,
+                        lottery: 0,
+                        shop2shop: 0,
+                        absa: 0,
+                        currFloat: 0,
+                        added: 0,
+                        todayTotal: 0
+                    };
+                }
+            }
+        }
+
+        // 核心计算联动逻辑 (智能检测活跃状态，排除未开机台干扰)
+        function getCalculatedFields(m) {
+            var data = dbLocal[activeDate];
+            var rec = data.reconciliations[m];
+            var cols = data.collections[m];
+
+            var todayCollection = 0;
+            if (cols && cols.forEach) {
+                cols.forEach(function(val) {
+                    todayCollection += parseFloat(val || 0);
+                });
+            }
+
+            // 判断机台今日是否开启/活跃
+            var isActive = (parseFloat(rec.revenue || 0) !== 0) || 
+                           (todayCollection !== 0) || 
+                           (parseFloat(rec.shop2shop || 0) !== 0) || 
+                           (parseFloat(rec.absa || 0) !== 0) || 
+                           (parseFloat(rec.lottery || 0) !== 0) || 
+                           (parseFloat(rec.added || 0) !== 0) ||
+                           (parseFloat(rec.currFloat || 0) !== 1000.00 && parseFloat(rec.currFloat || 0) !== 0);
+
+            if (!isActive) {
+                return {
+                    isActive: false,
+                    todayCollection: 0,
+                    expectedSubtotal: 0,
+                    s2sFee: 0,
+                    todayTotal: 0,
+                    actualTotal: 0,
+                    variance: 0
+                };
+            }
+
+            var expectedSubtotal = parseFloat(rec.prevFloat || 0) + parseFloat(rec.revenue || 0) + parseFloat(rec.added || 0);
+            var s2sGross = parseFloat(rec.shop2shop || 0);
+            var s2sFee = s2sGross * (S2S_FEE_RATE / 100);
+            var todayTotal = parseFloat(rec.currFloat || 0) - parseFloat(rec.added || 0);
+            var actualTotal = todayCollection + s2sGross + parseFloat(rec.absa || 0) + parseFloat(rec.currFloat || 0) + parseFloat(rec.lottery || 0);
+            var variance = actualTotal - expectedSubtotal;
+
+            return {
+                isActive: true,
+                todayCollection: todayCollection,
+                expectedSubtotal: expectedSubtotal,
+                s2sFee: s2sFee,
+                todayTotal: todayTotal,
+                actualTotal: actualTotal,
+                variance: variance
+            };
+        }
+
+        // 局部单行计算刷新
+        function recalculateRowDOM(m) {
+            var data = dbLocal[activeDate];
+            var rec = data.reconciliations[m];
+            var calc = getCalculatedFields(m);
+
+            var subtotalEl = document.getElementById(`cell-subtotal-${m}`);
+            var todayTotalEl = document.getElementById(`cell-todaytotal-${m}`);
+            var collectionEl = document.getElementById(`cell-collection-${m}`);
+            var actualTotalEl = document.getElementById(`cell-actualtotal-${m}`);
+            var varianceEl = document.getElementById(`cell-variance-${m}`);
+
+            if (subtotalEl) subtotalEl.innerText = calc.expectedSubtotal.toFixed(2);
+            if (todayTotalEl) todayTotalEl.innerText = calc.todayTotal.toFixed(2);
+            if (collectionEl) collectionEl.innerText = calc.todayCollection.toFixed(2);
+            if (actualTotalEl) actualTotalEl.innerText = calc.actualTotal.toFixed(2);
+            
+            if (varianceEl) {
+                varianceEl.innerText = (!calc.isActive ? '0.00' : (calc.variance >= 0 ? '+' : '') + calc.variance.toFixed(2));
+                var varianceClass = "px-3 py-1.5 text-right font-mono text-slate-700 font-bold text-[14px] sticky-col-right bg-white border-l border-slate-200";
+                if (calc.isActive) {
+                    if (calc.variance > 0.1) {
+                        varianceClass = "px-3 py-1.5 text-right font-mono text-emerald-600 font-black bg-emerald-50 text-[14px] sticky-col-right border-l border-slate-200";
+                    } else if (calc.variance < -100) {
+                        varianceClass = "px-3 py-1.5 text-right font-mono text-red-600 font-black bg-red-100 border-l border-r border-red-200 rounded px-1.5 text-[14px] sticky-col-right";
+                    } else if (calc.variance < -0.1) {
+                        varianceClass = "px-3 py-1.5 text-right font-mono text-rose-600 font-black bg-rose-50 text-[14px] sticky-col-right border-l border-slate-200";
+                    }
+                }
+                varianceEl.className = varianceClass;
+            }
+        }
+
+        // 局部子表小计渲染
+        function recalculateCollectionRowDOM(m) {
+            var cols = dbLocal[activeDate].collections[m];
+            var rowSum = 0;
+            if (cols && cols.forEach) {
+                cols.forEach(function(val) {
+                    rowSum += parseFloat(val || 0);
+                });
+            }
+            var sumEl = document.getElementById(`cell-col-sum-${m}`);
+            if (sumEl) sumEl.innerText = rowSum.toFixed(2);
+        }
+
+        // 仪表盘状态实时渲染
+        function updateKPIs(totals) {
+            var revenue = totals.revenue || 0;
+            var cash = totals.cash !== undefined ? totals.cash : (totals.todayCollection || 0);
+            var s2sFee = totals.s2sFee || 0;
+            var variance = totals.variance || 0;
+
+            var revenueEl = document.getElementById('stat-total-revenue');
+            var cashEl = document.getElementById('stat-total-cash');
+            var feeEl = document.getElementById('stat-total-s2s-fee');
+            var varEl = document.getElementById('stat-total-variance');
+            var varIcon = document.getElementById('stat-variance-icon');
+
+            if (revenueEl) revenueEl.innerText = `R ${revenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            if (cashEl) cashEl.innerText = `R ${cash.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            if (feeEl) feeEl.innerText = `R ${s2sFee.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            
+            if (varEl) {
+                varEl.innerText = `${variance >= 0 ? '+' : ''}R ${variance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                
+                if (variance > 0.1) {
+                    varEl.className = "text-xl font-black font-mono text-emerald-600";
+                    if (varIcon) {
+                        varIcon.className = "p-1.5 bg-emerald-50 rounded-lg text-emerald-600";
+                        varIcon.innerHTML = `<i data-lucide="trending-up" class="w-4 h-4"></i>`;
+                    }
+                } else if (variance < -100) {
+                    varEl.className = "text-xl font-black font-mono text-red-600 bg-red-100 px-2 rounded";
+                    if (varIcon) {
+                        varIcon.className = "p-1.5 bg-red-100 rounded text-red-600"; 
+                        varIcon.innerHTML = `<i data-lucide="alert-octagon" class="w-4 h-4"></i>`;
+                    }
+                } else if (variance < -0.1) {
+                    varEl.className = "text-xl font-black font-mono text-rose-600";
+                    if (varIcon) {
+                        varIcon.className = "p-1.5 bg-red-50 rounded-lg text-red-600 font-bold";
+                        varIcon.innerHTML = `<i data-lucide="trending-down" class="w-4 h-4"></i>`;
+                    }
+                } else {
+                    varEl.className = "text-xl font-black font-mono text-slate-800";
+                    if (varIcon) {
+                        varIcon.className = "p-1.5 bg-slate-100 rounded-lg text-slate-600";
+                        varIcon.innerHTML = `<i data-lucide="scale" class="w-4 h-4"></i>`;
+                    }
+                }
+            }
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        // 经营分析大图表生成函数
+        function renderChartsView() {
+            checkAndInitDateData(activeDate);
+            var data = dbLocal[activeDate];
+
+            var rankingContainer = document.getElementById('charts-ranking-container');
+            if (rankingContainer) {
+                rankingContainer.innerHTML = '';
+                var maxRevenue = 0;
+                var activeMachines = [];
+                for (var m = 1; m <= 12; m++) {
+                    var rev = parseFloat(data.reconciliations[m].revenue || 0);
+                    if (rev > maxRevenue) maxRevenue = rev;
+                    activeMachines.push({ machine: m, revenue: rev });
+                }
+                activeMachines.sort(function(a, b) { return b.revenue - a.revenue; });
+                activeMachines.forEach(function(item) {
+                    var percent = maxRevenue > 0 ? (item.revenue / maxRevenue) * 100 : 0;
+                    var barHtml = `<div class="flex items-center gap-3">
+                        <span class="text-xs font-bold text-slate-600 w-12 text-left font-black text-sm">${item.machine}号通道</span>
+                        <div class="flex-1 bg-slate-100 h-3.5 rounded overflow-hidden relative">
+                            <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-r" style="width: ${Math.max(percent, 1)}%"></div>
+                            <span class="absolute inset-0 pl-2 flex items-center text-[10px] font-bold font-mono text-slate-800">
+                                R ${item.revenue.toFixed(2)}
+                            </span>
+                        </div>
+                    </div>`;
+                    rankingContainer.innerHTML += barHtml;
+                });
+            }
+
+            var sharesContainer = document.getElementById('charts-payment-shares');
+            if (sharesContainer) {
+                sharesContainer.innerHTML = '';
+                var grandTotal = 0;
+                var channelTotals = { cash: 0, s2s: 0, absa: 0, lottery: 0 };
+                for (var m = 1; m <= 12; m++) {
+                    var rec = data.reconciliations[m];
+                    var calc = getCalculatedFields(m);
+                    if (calc.isActive) {
+                        channelTotals.cash += calc.todayCollection;
+                        channelTotals.s2s += parseFloat(rec.shop2shop || 0);
+                        channelTotals.absa += parseFloat(rec.absa || 0);
+                        channelTotals.lottery += parseFloat(rec.lottery || 0);
+                    }
+                }
+                grandTotal = channelTotals.cash + channelTotals.s2s + channelTotals.absa + channelTotals.lottery;
+                var channels = [
+                    { name: "现金解缴 (实收)", val: channelTotals.cash, color: "from-emerald-500 to-teal-400" },
+                    { name: "Shop2Shop 刷卡", val: channelTotals.s2s, color: "from-amber-500 to-orange-400" },
+                    { name: "Absa 刷卡终端", val: channelTotals.absa, color: "from-purple-500 to-indigo-400" },
+                    { name: "彩票与其他代收", val: channelTotals.lottery, color: "from-slate-400 to-slate-300" }
+                ];
+                channels.forEach(function(ch) {
+                    var sharePercent = grandTotal > 0 ? (ch.val / grandTotal) * 100 : 0;
+                    var shareHtml = `<div class="space-y-1">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <span class="text-slate-600 flex items-center gap-1.5 font-bold">
+                                <span class="w-2.5 h-2.5 rounded-full bg-gradient-to-br ${ch.color}"></span> ${ch.name}
+                            </span>
+                            <span class="text-slate-700 font-mono">R ${ch.val.toFixed(2)} (${sharePercent.toFixed(1)}%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r ${ch.color}" style="width: ${sharePercent}%"></div>
+                        </div>
+                    </div>`;
+                    sharesContainer.innerHTML += shareHtml;
+                });
+            }
+        }
+
+        function recalculateAllTotals() {
+            var data = dbLocal[activeDate];
+            var totals = {
+                prevFloat: 0, revenue: 0, subtotal: 0, lottery: 0,
+                s2sGross: 0, s2sFee: 0, absa: 0, currFloat: 0,
+                added: 0, todayTotal: 0, cash: 0,
+                actualTotal: 0, variance: 0
+            };
+            var colTotals = [0, 0, 0, 0, 0, 0];
+
+            for (var m = 1; m <= 12; m++) {
+                var rec = data.reconciliations[m];
+                var cols = data.collections[m];
+                var calc = getCalculatedFields(m);
+
+                if (calc.isActive) {
+                    totals.prevFloat += parseFloat(rec.prevFloat || 0);
+                    totals.revenue += parseFloat(rec.revenue || 0);
+                    totals.subtotal += calc.expectedSubtotal;
+                    totals.lottery += parseFloat(rec.lottery || 0);
+                    totals.s2sGross += parseFloat(rec.shop2shop || 0);
+                    totals.s2sFee += calc.s2sFee;
+                    totals.absa += parseFloat(rec.absa || 0);
+                    totals.currFloat += parseFloat(rec.currFloat || 0);
+                    totals.added += parseFloat(rec.added || 0);
+                    totals.todayTotal += calc.todayTotal;
+                    totals.cash += calc.todayCollection;
+                    totals.actualTotal += calc.actualTotal;
+                    totals.variance += calc.variance;
+
+                    for (var i = 0; i < 5; i++) {
+                        colTotals[i] += parseFloat(cols[i] || 0);
+                    }
+                    colTotals[5] += calc.todayCollection;
+                }
+            }
+
+            // 渲染底层 DOM合计
+            var fPrev = document.getElementById('foot-prevFloat');
+            var fRev = document.getElementById('foot-revenue');
+            var fSub = document.getElementById('foot-subtotal');
+            var fLot = document.getElementById('foot-lottery');
+            var fS2S = document.getElementById('foot-shop2shop');
+            var fAbsa = document.getElementById('foot-absa');
+            var fCurr = document.getElementById('foot-currFloat');
+            var fAdd = document.getElementById('foot-added');
+            var fTTotal = document.getElementById('foot-todayTotal');
+            var fCash = document.getElementById('foot-cash');
+            var fAct = document.getElementById('foot-actualTotal');
+            var fVar = document.getElementById('foot-variance');
+
+            if (fPrev) fPrev.innerText = totals.prevFloat.toFixed(2);
+            if (fRev) fRev.innerText = totals.revenue.toFixed(2);
+            if (fSub) fSub.innerText = totals.subtotal.toFixed(2);
+            if (fLot) fLot.innerText = totals.lottery.toFixed(2);
+            if (fS2S) {
+                fS2S.innerHTML = `<span class="text-[16px] font-black text-amber-900 font-mono">${totals.s2sGross.toFixed(2)}</span><br><span class="text-[13px] text-amber-800 font-black font-mono leading-none">(S2S扣费: -${totals.s2sFee.toFixed(2)})</span>`;
+            }
+            if (fAbsa) fAbsa.innerText = totals.absa.toFixed(2);
+            if (fCurr) fCurr.innerText = totals.currFloat.toFixed(2);
+            if (fAdd) fAdd.innerText = totals.added.toFixed(2);
+            if (fTTotal) fTTotal.innerText = totals.todayTotal.toFixed(2);
+            if (fCash) fCash.innerText = totals.cash.toFixed(2);
+            if (fAct) fAct.innerText = totals.actualTotal.toFixed(2);
+            if (fVar) {
+                fVar.innerText = (totals.variance >= 0 ? '+' : '') + totals.variance.toFixed(2);
+                fVar.className = `px-3 py-3 text-right text-[16px] font-mono font-black sticky-col-right bg-slate-100 ${totals.variance >= 0 ? 'text-emerald-700' : 'text-red-700'}`;
+            }
+
+            for (var i = 0; i < 5; i++) {
+                var fCol = document.getElementById(`foot-col-${i}`);
+                if (fCol) fCol.innerText = colTotals[i].toFixed(2);
+            }
+            var fColSum = document.getElementById('foot-col-sum');
+            if (fColSum) fColSum.innerText = colTotals[5].toFixed(2);
+
+            updateKPIs(totals);
+        }
+
+        // 渲染主对账表
+        function renderReconcileTable() {
+            checkAndInitDateData(activeDate);
+            var data = dbLocal[activeDate];
+            var tbody = document.getElementById('reconcile-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            for (var m = 1; m <= 12; m++) {
+                var rec = data.reconciliations[m];
+                var calc = getCalculatedFields(m);
+
+                if (hideIdle) {
+                    var activeFlow = parseFloat(rec.revenue || 0) + 
+                                       parseFloat(rec.shop2shop || 0) + 
+                                       parseFloat(rec.absa || 0) + 
+                                       parseFloat(rec.lottery || 0) + 
+                                       parseFloat(rec.added || 0) + 
+                                       calc.todayCollection;
+                    if (activeFlow === 0) {
+                        continue; 
+                    }
+                }
+
+                var varianceClass = "text-slate-700 font-bold text-[14px] sticky-col-right bg-slate-50 border-l border-slate-200";
+                var varianceText = "0.00";
+                if (calc.isActive) {
+                    varianceText = (calc.variance >= 0 ? '+' : '') + calc.variance.toFixed(2);
+                    if (calc.variance > 0.1) {
+                        varianceClass = "text-emerald-600 font-black bg-emerald-50 text-[14px] sticky-col-right border-l border-slate-200";
+                    } else if (calc.variance < -100) {
+                        varianceClass = "text-red-600 font-black bg-red-100 border-l border-r border-red-200 rounded px-1.5 text-[14px] sticky-col-right"; 
+                    } else if (calc.variance < -0.1) {
+                        varianceClass = "text-rose-600 font-black bg-rose-50 text-[14px] sticky-col-right border-l border-slate-200";
+                    }
+                }
+
+                var tr = document.createElement('tr');
+                tr.id = `reconcile-row-${m}`;
+                tr.className = "hover:bg-slate-50 transition-colors border-b border-slate-200";
+                tr.innerHTML = `
+                    <td class="px-2 py-2 text-center font-black text-slate-800 bg-slate-100/95 text-[14px] sticky-col-left border-r border-slate-200">${m}号机</td>
+                    <td class="px-1 py-1">
+                        <div class="table-input-container">
+                            <input type="number" step="0.01" id="input-prevFloat-${m}" class="table-input font-mono ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" data-row="${m}" data-col="prevFloat" data-col-index="0" value="${rec.prevFloat || 0}" ${isLocked ? 'readonly' : ''} oninput="onInputReconcileField(${m}, 'prevFloat', this.value)" onfocus="highlightRow(${m}, true)" onblur="highlightRow(${m}, false)">
+                        </div>
+                    </td>
+                    <td class="px-1 py-1">
+                        <div class="table-input-container">
+                            <input type="number" class="table-input font-black text-slate-900 font-mono ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" data-row="${m}" data-col="revenue" data-col-index="1" value="${rec.revenue || 0}" ${isLocked ? 'readonly' : ''} oninput="onInputReconcileField(${m}, 'revenue', this.value)" onfocus="highlightRow(${m}, true)" onblur="highlightRow(${m}, false)">
+                        </div>
+                    </td>
+                    <td id="cell-subtotal-${m}" class="px-2 py-2 text-right font-black text-blue-600 bg-blue-50/50 font-mono text-[14px]">${calc.expectedSubtotal.toFixed(2)}</td>
+                    <td class="px-1 py-1">
+                        <div class="table-input-container">
+                            <input type="number" step="0.01" class="table-input font-mono ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" data-row="${m}" data-col="lottery" data-col-index="2" value="${rec.lottery || 0}" ${isLocked ? 'readonly' : ''} oninput="onInputReconcileField(${m}, 'lottery', this.value)" onfocus="highlightRow(${m}, true)" onblur="highlightRow(${m}, false)">
+                        </div>
+                    </td>
+                    <td class="px-1 py-1 bg-amber-50/10">
+                        <div class="table-input-container">
+                            <input type="number" step="0.01" class="table-input text-amber-600 font-black font-mono ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" data-row="${m}" data-col="shop2shop" data-col-index="3" value="${rec.shop2shop || 0}" ${isLocked ? 'readonly' : ''} oninput="onInputReconcileField(${m}, 'shop2shop', this.value)" onfocus="highlightRow(${m}, true)" onblur="highlightRow(${m}, false)">
+                        </div>
+                    </td>
+                    <td class="px-1 py-1">
+                        <div class="table-input-container">
+                            <input type="number" step="0.01" class="table-input font-mono ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" data-row="${m}" data-col="absa" data-col-index="4" value="${rec.absa || 0}" ${isLocked ? 'readonly' : ''} oninput="onInputReconcileField(${m}, 'absa', this.value)" onfocus="highlightRow(${m}, true)" onblur="highlightRow(${m}, false)">
+                        </div>
+                    </td>
+                    <td class="px-1 py-1">
+                        <div class="table-input-container">
+                            <input type="number" step="0.01" id="input-currFloat-${m}" class="table-input font-mono ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" data-row="${m}" data-col="currFloat" data-col-index="5" value="${rec.currFloat || 0}" ${isLocked ? 'readonly' : ''} oninput="onInputReconcileField(${m}, 'currFloat', this.value)" onfocus="highlightRow(${m}, true)" onblur="highlightRow(${m}, false)">
+                        </div>
+                    </td>
+                    <td class="px-1 py-1">
+                        <div class="table-input-container">
+                            <input type="number" step="0.01" class="table-input font-mono ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" data-row="${m}" data-col="added" data-col-index="6" value="${rec.added || 0}" ${isLocked ? 'readonly' : ''} oninput="onInputReconcileField(${m}, 'added', this.value)" onfocus="highlightRow(${m}, true)" onblur="highlightRow(${m}, false)">
+                        </div>
+                    </td>
+                    <td id="cell-todaytotal-${m}" class="px-2 py-2 text-right text-slate-500 font-mono font-bold text-[14px]">${calc.todayTotal.toFixed(2)}</td>
+                    <td id="cell-collection-${m}" class="px-2 py-2 text-right font-black text-slate-700 bg-slate-100/50 font-mono text-[14px]">${calc.todayCollection.toFixed(2)}</td>
+                    <td id="cell-actualtotal-${m}" class="px-2 py-2 text-right font-black text-emerald-600 bg-emerald-50/50 font-mono text-[14px]">${calc.actualTotal.toFixed(2)}</td>
+                    <td id="cell-variance-${m}" class="px-3 py-2 text-right ${varianceClass} font-mono">${varianceText}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            var tfoot = document.getElementById('reconcile-tfoot');
+            if (tfoot) {
+                tfoot.innerHTML = `
+                    <tr class="bg-slate-100 font-black border-t-2 border-slate-300 text-slate-800 text-[14px]">
+                        <td class="px-2 py-3 text-center uppercase text-slate-700 font-black bg-slate-200/90 sticky-col-left border-r border-slate-200">总记</td>
+                        <td id="foot-prevFloat" class="px-2 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-revenue" class="px-2 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-subtotal" class="px-2 py-3 text-right text-blue-600 bg-blue-50/50 font-mono">0.00</td>
+                        <td id="foot-lottery" class="px-2 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-shop2shop" class="px-2 py-3 text-right text-amber-600 bg-amber-50/10 font-mono">0.00</td>
+                        <td id="foot-absa" class="px-2 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-currFloat" class="px-2 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-added" class="px-2 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-todayTotal" class="px-2 py-3 text-right text-slate-500 font-mono">0.00</td>
+                        <td id="foot-cash" class="px-2 py-3 text-right text-slate-700 bg-slate-200/30 font-mono">0.00</td>
+                        <td id="foot-actualTotal" class="px-2 py-3 text-right text-emerald-600 bg-emerald-50/50 font-mono">0.00</td>
+                        <td id="foot-variance" class="px-3 py-3 text-right text-[15px] font-mono sticky-col-right bg-slate-100 border-l border-slate-200">0.00</td>
+                    </tr>
+                `;
+            }
+
+            recalculateAllTotals();
+            setupTableKeyNavigation(); 
+        }
+
+        // 渲染解缴子表
+        function renderCollectionTable() {
+            checkAndInitDateData(activeDate);
+            var data = dbLocal[activeDate];
+            var tbody = document.getElementById('collection-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            for (var m = 1; m <= 12; m++) {
+                var cols = data.collections[m];
+                
+                // 如果开启了隐藏未营业机台，子表也同步隐藏
+                if (hideIdle) {
+                    var rowSum = 0;
+                    if (cols && cols.forEach) {
+                        cols.forEach(function(v) { rowSum += parseFloat(v || 0); });
+                    }
+                    var rec = data.reconciliations[m];
+                    var activeFlow = parseFloat(rec.revenue || 0) + 
+                                       parseFloat(rec.shop2shop || 0) + 
+                                       parseFloat(rec.absa || 0) + 
+                                       parseFloat(rec.lottery || 0) + 
+                                       parseFloat(rec.added || 0) + 
+                                       rowSum;
+                    if (activeFlow === 0) {
+                        continue; 
+                    }
+                }
+
+                var rowSum = 0;
+                if (cols && cols.forEach) {
+                    cols.forEach(function(v) { rowSum += parseFloat(v || 0); });
+                }
+
+                var tr = document.createElement('tr');
+                tr.id = `collection-row-${m}`;
+                tr.className = "hover:bg-slate-50 transition-colors border-b border-slate-200";
+                
+                let inputsHTML = '';
+                for (var i = 0; i < 5; i++) {
+                    inputsHTML += `
+                        <td class="px-2 py-1">
+                            <div class="table-input-container">
+                                <input type="number" class="table-input font-semibold font-mono ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" data-row="${m}" data-col="col-${i}" data-col-index="${i + 7}" value="${cols[i] || 0}" ${isLocked ? 'readonly' : ''} oninput="onInputCollectionField(${m}, ${i}, this.value)" onfocus="highlightCollectionRow(${m}, true)" onblur="highlightCollectionRow(${m}, false)">
+                            </div>
+                        </td>
+                    `;
+                }
+
+                tr.innerHTML = `
+                    <td class="px-2 py-2 text-center font-black text-slate-700 bg-slate-100/90 text-[14px] sticky-col-left border-r border-slate-200">${m}号机</td>
+                    ${inputsHTML}
+                    <td id="cell-col-sum-${m}" class="px-4 py-2.5 text-right font-black text-emerald-600 bg-emerald-50/30 pr-3 font-mono text-[14px] sticky-col-right bg-white border-l border-slate-200">${rowSum.toFixed(2)}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            var tfoot = document.getElementById('collection-tfoot');
+            if (tfoot) {
+                tfoot.innerHTML = `
+                    <tr class="bg-slate-100 font-black border-t-2 border-slate-300 text-slate-800 text-[14px]">
+                        <td class="px-4 py-3 text-center uppercase text-slate-600 font-bold bg-slate-200/90 font-mono sticky-col-left border-r border-slate-200">总</td>
+                        <td id="foot-col-0" class="px-1 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-col-1" class="px-1 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-col-2" class="px-1 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-col-3" class="px-1 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-col-4" class="px-1 py-3 text-right font-mono">0.00</td>
+                        <td id="foot-col-sum" class="px-4 py-3 text-right text-emerald-600 pr-3 bg-emerald-50/30 font-mono sticky-col-right bg-slate-100 border-l border-slate-200">0.00</td>
+                    </tr>
+                `;
+            }
+
+            recalculateAllTotals();
+            setupTableKeyNavigation(); 
+        }
+
+        // 云端同步写回 (🌟 智能去抖 Debounce 防写入踩踏，多人协同极佳)
+        function saveToCloud() {
+            if (!isFirebaseReady || !currentUser) return;
+            
+            // 每次打字时，清除前一次的未执行保存，防多设备卡顿踩踏
+            if (writeTimeout) clearTimeout(writeTimeout);
+            
+            writeTimeout = setTimeout(() => {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dailyReconciliations', activeDate);
+                setDoc(docRef, dbLocal[activeDate]).then(() => {
+                    showToast("点钞协同数据已安全自动秒级云同步！", false);
+                }).catch(err => {
+                    console.error("云端实时保存失败: ", err);
+                });
+            }, 500); // 500毫秒去抖动时间
+        }
+
+        // 数值直接录入时的响应函数 (实现高频秒级响应与即时自动保存)
+        function onInputReconcileField(machine, field, value) {
+            checkAndInitDateData(activeDate);
+            dbLocal[activeDate].reconciliations[machine][field] = parseFloat(value) || 0;
+            recalculateRowDOM(machine);
+            recalculateAllTotals();
+            renderChartsView(); 
+            // 本地缓存备份
+            try {
+                localStorage.setItem('wellsave_pro_accounting_exact_db', JSON.stringify(dbLocal));
+            } catch(e) {}
+            // 云端实时同步
+            saveToCloud();
+        }
+
+        // 局部现金收款更改响应
+        function onInputCollectionField(machine, index, value) {
+            checkAndInitDateData(activeDate);
+            dbLocal[activeDate].collections[machine][index] = parseFloat(value) || 0;
+            recalculateCollectionRowDOM(machine);
+            recalculateRowDOM(machine);
+            recalculateAllTotals();
+            renderChartsView(); 
+            // 本地缓存备份
+            try {
+                localStorage.setItem('wellsave_pro_accounting_exact_db', JSON.stringify(dbLocal));
+            } catch(e) {}
+            // 云端实时同步
+            saveToCloud();
+        }
+
+        // 🌟 重新启用并完整声明：渲染与刷新函数，保证不再发生未定义报错
+        function renderAll() {
+            if (activeTab === "reconcile") {
+                renderReconcileTable();
+            } else if (activeTab === "collection") {
+                renderCollectionTable();
+            } else if (activeTab === "charts") {
+                renderChartsView();
+            }
+        }
+
+        // 🌟 重新补上并定义：表格方向键穿梭与焦点自动选取函数 setupTableKeyNavigation
+        function setupTableKeyNavigation() {
+            var mainContainer = document.getElementById("section-reconcile");
+            var subContainer = document.getElementById("section-collection");
+            if (!mainContainer || !subContainer) return;
+
+            var mainInputs = Array.prototype.slice.call(mainContainer.querySelectorAll('input.table-input'));
+            var subInputs = Array.prototype.slice.call(subContainer.querySelectorAll('input.table-input'));
+            var currentInputs = activeTab === "reconcile" ? mainInputs : subInputs;
+
+            currentInputs.forEach(function(input) {
+                input.addEventListener('focus', function() {
+                    var self = this;
+                    setTimeout(function() {
+                        self.select();
+                    }, 50);
+                });
+
+                input.addEventListener('keydown', function(e) {
+                    var currentRow = parseInt(this.getAttribute('data-row'), 10);
+                    var currentColIndex = parseInt(this.getAttribute('data-col-index'), 10);
+
+                    // 获取当前激活页面中可见的行
+                    var visibleRows = [];
+                    currentInputs.forEach(function(i) {
+                        var rVal = parseInt(i.getAttribute('data-row'), 10);
+                        if (visibleRows.indexOf(rVal) === -1) {
+                            visibleRows.push(rVal);
+                        }
+                    });
+                    visibleRows.sort(function(a, b) { return a - b; });
+                    var currentRowIdx = visibleRows.indexOf(currentRow);
+
+                    var targetRow = currentRow;
+                    var targetColIndex = currentColIndex;
+                    var nextInput = null;
+
+                    var maxCols = activeTab === "reconcile" ? 7 : 12; // 左表 0-6，右表 7-11
+
+                    switch (e.key || e.keyCode) {
+                        case 'ArrowUp': 
+                        case 38: 
+                            e.preventDefault();
+                            if (currentRowIdx > 0) {
+                                targetRow = visibleRows[currentRowIdx - 1];
+                            }
+                            break;
+                        case 'ArrowDown': 
+                        case 40: 
+                        case 'Enter': 
+                        case 13: 
+                            e.preventDefault();
+                            if (currentRowIdx < visibleRows.length - 1) {
+                                targetRow = visibleRows[currentRowIdx + 1];
+                            }
+                            break;
+                        case 'ArrowLeft': 
+                        case 37: 
+                            e.preventDefault();
+                            targetColIndex = currentColIndex - 1;
+                            // 页面内边界限制
+                            if (activeTab === "reconcile" && targetColIndex < 0) {
+                                targetColIndex = currentColIndex; 
+                            } else if (activeTab === "collection" && targetColIndex < 7) {
+                                targetColIndex = currentColIndex; 
+                            }
+                            break;
+                        case 'ArrowRight': 
+                        case 39: 
+                            e.preventDefault();
+                            targetColIndex = currentColIndex + 1;
+                            // 页面内边界限制
+                            if (activeTab === "reconcile" && targetColIndex >= 7) {
+                                targetColIndex = currentColIndex; 
+                            } else if (activeTab === "collection" && targetColIndex >= 12) {
+                                targetColIndex = currentColIndex; 
+                            }
+                            break;
+                        default:
+                            return; 
+                    }
+
+                    // 100%兼容的经典循环寻址替代 find 方法
+                    for (var index = 0; index < currentInputs.length; index++) {
+                        var item = currentInputs[index];
+                        if (parseInt(item.getAttribute('data-row'), 10) === targetRow && 
+                            parseInt(item.getAttribute('data-col-index'), 10) === targetColIndex) {
+                            nextInput = item;
+                            break;
+                        }
+                    }
+
+                    if (nextInput) {
+                        nextInput.focus();
+                    }
+                });
+            });
+        }
+
+        // 🌟 绑定专属强力安全登录锁屏事件监听
+        function setupAuthListeners() {
+            const loginOverlay = document.getElementById('login-overlay');
+            const usernameInput = document.getElementById('login-username');
+            const passwordInput = document.getElementById('login-password');
+            const submitBtn = document.getElementById('btn-login-submit');
+            const errorMsg = document.getElementById('login-error-msg');
+            const authActionBtn = document.getElementById('btn-auth-action');
+
+            // 检查已存授权状态，保持登录连续性，防止无谓重复打字
+            const isAuthorized = localStorage.getItem('wellsave_authorized') === 'true';
+            if (isAuthorized) {
+                if (loginOverlay) loginOverlay.classList.add('hidden');
+                updateAuthUI(true);
+            } else {
+                if (loginOverlay) loginOverlay.classList.remove('hidden');
+                updateAuthUI(false);
+            }
+
+            // 登录校验处理器
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function() {
+                    const userVal = usernameInput.value.trim();
+                    const passVal = passwordInput.value;
+
+                    // 🌟 满足股东要求，使用 wellsave / 070322 安全准入
+                    if (userVal === 'wellsave' && passVal === '070322') {
+                        localStorage.setItem('wellsave_authorized', 'true');
+                        if (loginOverlay) loginOverlay.classList.add('hidden');
+                        if (errorMsg) errorMsg.classList.add('hidden');
+                        showToast("对账协同中心验证成功！数据云同步已激活。", false);
+                        updateAuthUI(true);
+                        renderAll();
+                    } else {
+                        if (errorMsg) errorMsg.classList.remove('hidden');
+                        showToast("登录验证失败，账号或密码错误！", true);
+                    }
+                });
+            }
+
+            // 锁屏退出按钮监听器
+            if (authActionBtn) {
+                authActionBtn.addEventListener('click', () => {
+                    localStorage.removeItem('wellsave_authorized');
+                    if (loginOverlay) loginOverlay.classList.remove('hidden');
+                    if (usernameInput) usernameInput.value = '';
+                    if (passwordInput) passwordInput.value = '';
+                    if (errorMsg) errorMsg.classList.add('hidden');
+                    updateAuthUI(false);
+                    showToast("对账工作台已退登并加锁保护。", false);
+                });
+            }
+        }
+
+        // 刷新顶栏云端同步与登录账号状态卡片样式
+        function updateAuthUI(isAuthorized) {
+            const authBtnText = document.getElementById('auth-btn-text');
+            const cloudStatusText = document.getElementById('cloud-status-text');
+            const cloudStatusBtn = document.getElementById('btn-cloud-status');
+            const cloudIcon = document.getElementById('cloud-icon');
+
+            if (isAuthorized) {
+                if (authBtnText) authBtnText.innerText = "锁定系统";
+                if (cloudStatusText) cloudStatusText.innerText = "wellsave";
+                if (cloudStatusBtn) {
+                    cloudStatusBtn.className = "flex items-center gap-1 px-3 py-1 bg-emerald-50 border border-emerald-300 rounded text-xs font-black text-emerald-700 transition-all";
+                }
+                if (cloudIcon) {
+                    cloudIcon.setAttribute('data-lucide', 'cloud-lightning');
+                }
+            } else {
+                if (authBtnText) authBtnText.innerText = "未解锁";
+                if (cloudStatusText) cloudStatusText.innerText = "单机未授权";
+                if (cloudStatusBtn) {
+                    cloudStatusBtn.className = "flex items-center gap-1 px-3 py-1 bg-slate-200 border border-slate-300 rounded text-xs font-black text-slate-700 transition-all";
+                }
+                if (cloudIcon) {
+                    cloudIcon.setAttribute('data-lucide', 'cloud-off');
+                }
+            }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        // 🌟 初始化Auth监听状态 (MANDATORY: 必须先检测 __initial_auth_token 进行授权，规避 Permission Denied)
+        if (isFirebaseReady) {
+            const initAuth = async () => {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    try {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } catch (e) {
+                        console.warn("Custom token auth failed, falling back to anonymous auth: ", e);
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                }
+            };
+            initAuth();
+
+            onAuthStateChanged(auth, (user) => {
+                currentUser = user;
+                if (user) {
+                    // 云端连接稳定，开启多设备协同快照监听
+                    if (cloudUnsubscribe) cloudUnsubscribe();
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dailyReconciliations', activeDate);
+                    cloudUnsubscribe = onSnapshot(docRef, (docSnapshot) => {
+                        // 仅在本地授权进入后才接受云快照覆盖，防止泄密
+                        if (localStorage.getItem('wellsave_authorized') === 'true' && docSnapshot.exists()) {
+                            dbLocal[activeDate] = docSnapshot.data();
+                            recalculateAllTotals();
+                            renderAll();
+                        }
+                    }, (error) => {
+                        console.error("云端实时同步监听异常: ", error);
+                    });
+                }
+            });
+        }
+
+        // 结转明日与抹零动作
+        function setupPageActions() {
+            var btnRollForward = document.getElementById('btn-roll-forward');
+            var btnClearDaily = document.getElementById('btn-clear-daily');
+            
+            var modal = document.getElementById('confirm-modal');
+            var btnCancel = document.getElementById('btn-confirm-cancel');
+            var btnOk = document.getElementById('btn-confirm-ok');
+            
+            var modalTitle = document.getElementById('confirm-title');
+            var modalDesc = document.getElementById('confirm-desc');
+            var iconBox = document.getElementById('confirm-icon-box');
+
+            if (btnRollForward) {
+                btnRollForward.addEventListener('click', function() {
+                    currentAction = "roll";
+                    checkAndInitDateData(activeDate);
+                    var data = dbLocal[activeDate];
+                    
+                    var anomalousMachines = [];
+                    var inactiveMachinesCount = 0;
+
+                    for (var m = 1; m <= 12; m++) {
+                        var rec = data.reconciliations[m];
+                        var cols = data.collections[m];
+                        
+                        var totalCashDrop = 0;
+                        if (cols && cols.forEach) {
+                            cols.forEach(function(v) { totalCashDrop += parseFloat(v || 0); });
+                        }
+                        
+                        var activeFlow = parseFloat(rec.revenue || 0) + 
+                                           parseFloat(rec.shop2shop || 0) + 
+                                           parseFloat(rec.absa || 0) + 
+                                           parseFloat(rec.lottery || 0) + 
+                                           parseFloat(rec.added || 0) + 
+                                           totalCashDrop;
+                        
+                        var currFloat = parseFloat(rec.currFloat || 0);
+                        
+                        if (activeFlow > 0) {
+                            if (currFloat === 0) {
+                                anomalousMachines.push(m);
+                            }
+                        } else {
+                            inactiveMachinesCount++;
+                        }
+                    }
+
+                    if (anomalousMachines.length > 0) {
+                        if (modalTitle) modalTitle.innerHTML = `<span class="text-amber-655 flex items-center justify-center gap-1"><i data-lucide="shield-alert" class="w-5 h-5"></i> 漏填备用金警告</span>`;
+                        if (modalDesc) {
+                            modalDesc.innerHTML = `系统检测到以下收银机今天有销售账目，但您没有输入<strong>「今日底数（备用金）」</strong>：<br><br>
+                            <span class="text-amber-600 font-bold text-sm bg-slate-50 border border-slate-200 px-3 py-1.5 rounded block font-mono">收银机号: ${anomalousMachines.join(', ')} 号机</span><br>
+                            未填写的营业机台结转后底数将被重置为 0。另有 <strong>${inactiveMachinesCount}台机</strong> 今日无流水，备用金将自动保持原样结转。<br><br>您确定要继续强行结转吗？`;
+                        }
+                        if (iconBox) {
+                            iconBox.className = "w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-amber-50 text-amber-600 animate-pulse";
+                            iconBox.innerHTML = `<i data-lucide="shield-alert" class="w-6 h-6"></i>`;
+                        }
+                    } else {
+                        if (modalTitle) modalTitle.innerText = "确认结转备用金（交接班）？";
+                        if (modalDesc) {
+                            modalDesc.innerHTML = `系统将自动帮您把今日营业机台的<strong>「今日底数」结转复制到明日的「昨日留底」</strong>，并自动开启明天账单！<br><br>
+                            💡 智能安全保护：对于今天<strong>未开机营业的 ${inactiveMachinesCount} 台机</strong>，其余额（昨日留底）将<strong>自动原封不动留存</strong>到明天，无需您重新输入。<br><br>
+                            点击下方确定，系统将自动跳转至明天的空白对账单。`;
+                        }
+                        if (iconBox) {
+                            iconBox.className = "w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-indigo-100 text-indigo-600";
+                            iconBox.innerHTML = `<i data-lucide="arrow-right-left" class="w-6 h-6"></i>`;
+                        }
+                    }
+                    
+                    if (typeof lucide !== 'undefined') {
+                        lucide.createIcons();
+                    }
+                    if (modal) modal.classList.remove('hidden');
+                });
+            }
+
+            if (btnClearDaily) {
+                btnClearDaily.addEventListener('click', function() {
+                    currentAction = "clear";
+                    if (modalTitle) modalTitle.innerText = "确认清空今日数据吗？";
+                    if (modalDesc) modalDesc.innerText = "系统将清除今天所有录入的营业额、彩票、加钱和多次交纳的现金。注：收银机备用金留底依然会被安全保留。";
+                    if (iconBox) {
+                        iconBox.className = "w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-rose-50 text-rose-500";
+                        iconBox.innerHTML = `<i data-lucide="trash-2" class="w-6 h-6"></i>`;
+                    }
+                    if (typeof lucide !== 'undefined') {
+                        lucide.createIcons();
+                    }
+                    if (modal) modal.classList.remove('hidden');
+                });
+            }
+
+            if (btnCancel) {
+                btnCancel.addEventListener('click', function() {
+                    if (modal) modal.classList.add('hidden');
+                    currentAction = null;
+                });
+            }
+
+            if (btnOk) {
+                btnOk.addEventListener('click', function() {
+                    if (modal) modal.classList.add('hidden');
+                    checkAndInitDateData(activeDate);
+                    var data = dbLocal[activeDate];
+
+                    if (currentAction === "roll") {
+                        // 🌟 时区安全的字符串解析与日期累加
+                        var parts = activeDate.split('-');
+                        var currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                        currentDate.setDate(currentDate.getDate() + 1); 
+                        
+                        var nextY = currentDate.getFullYear();
+                        var nextM = padZero(currentDate.getMonth() + 1);
+                        var nextD = padZero(currentDate.getDate());
+                        var nextDateStr = nextY + '-' + nextM + '-' + nextD;
+
+                        checkAndInitDateData(nextDateStr);
+                        var tomorrowData = dbLocal[nextDateStr];
+
+                        for (var m = 1; m <= 12; m++) {
+                            var rec = data.reconciliations[m];
+                            var cols = data.collections[m];
+                            var tomorrowRec = tomorrowData.reconciliations[m];
+                            
+                            var totalCashDrop = 0;
+                            if (cols && cols.forEach) {
+                                cols.forEach(function(v) { totalCashDrop += parseFloat(v || 0); });
+                            }
+                            
+                            var activeFlow = parseFloat(rec.revenue || 0) + 
+                                               parseFloat(rec.shop2shop || 0) + 
+                                               parseFloat(rec.absa || 0) + 
+                                               parseFloat(rec.lottery || 0) + 
+                                               parseFloat(rec.added || 0) + 
+                                               totalCashDrop;
+
+                            if (activeFlow > 0) {
+                                tomorrowRec.prevFloat = parseFloat(rec.currFloat || 0);
+                            } else {
+                                tomorrowRec.prevFloat = parseFloat(rec.prevFloat || 0);
+                            }
+                        }
+
+                        activeDate = nextDateStr;
+                        var dateInput = document.getElementById('accounting-date');
+                        if (dateInput) dateInput.value = nextDateStr;
+                        
+                        try {
+                            localStorage.setItem('wellsave_pro_accounting_exact_db', JSON.stringify(dbLocal));
+                        } catch(e) {}
+                        
+                        renderAll();
+                        showToast(`结转明天成功！日期已自动切换至：${nextDateStr}，今日底数已全部结转为期初备用金。`, false);
+                        
+                        if (typeof window.saveToCloud === 'function') {
+                            window.saveToCloud();
+                        } else {
+                            saveToCloud();
+                        }
+                        
+                    } else if (currentAction === "clear") {
+                        for (var m = 1; m <= 12; m++) {
+                            var rec = data.reconciliations[m];
+                            rec.revenue = 0;
+                            rec.lottery = 0;
+                            rec.shop2shop = 0;
+                            rec.absa = 0;
+                            rec.added = 0;
+                            data.collections[m] = [0, 0, 0, 0, 0];
+                        }
+                        renderAll();
+                        showToast("今日账目销售数据已清零，收银备用金已留存不变。", false);
+                        
+                        if (typeof window.saveToCloud === 'function') {
+                            window.saveToCloud();
+                        } else {
+                            saveToCloud();
+                        }
+                    }
+
+                    currentAction = null;
+                });
+            }
+        }
+
+        // 编辑锁定安全锁
+        function setupSafetyLock() {
+            var btnLock = document.getElementById('btn-lock-toggle');
+            if (btnLock) {
+                btnLock.addEventListener('click', function() {
+                    isLocked = !isLocked;
+                    if (isLocked) {
+                        btnLock.className = "flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-500 rounded-lg text-xs font-bold transition-all";
+                        btnLock.innerHTML = `<i data-lucide="lock" class="w-3.5 h-3.5 animation-bounce"></i> <span id="lock-text" class="font-bold text-red-400">表格已锁定</span>`;
+                        showToast("对账单安全锁定启用！所有字段现在只读保护。", true);
+                    } else {
+                        btnLock.className = "flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-emerald-600 border border-slate-200 rounded-lg text-xs font-bold transition-all";
+                        btnLock.innerHTML = `<i data-lucide="lock-open" class="w-3.5 h-3.5"></i> <span id="lock-text">正常编辑中</span>`;
+                    }
+                    renderAll(); 
+                });
+            }
+        }
+
+        // F4 快速切换选项卡
+        function setupKeyboardShortcuts() {
+            window.addEventListener('keydown', function(e) {
+                if (e.key === 'F4') {
+                    e.preventDefault(); 
+                    if (activeTab === "reconcile") {
+                        var btnCollection = document.getElementById('tab-collection-btn');
+                        if (btnCollection) btnCollection.click();
+                    } else if (activeTab === "collection") {
+                        var btnCharts = document.getElementById('tab-charts-btn');
+                        if (btnCharts) btnCharts.click();
+                    } else {
+                        var btnReconcile = document.getElementById('tab-reconcile-btn');
+                        if (btnReconcile) btnReconcile.click();
+                    }
+                }
+            });
+        }
+
+        // JSON 对账数据库备份及恢复机制
+        function setupDataBackupAndRestore() {
+            var btnBackup = document.getElementById('btn-backup-db');
+            var btnRestoreTrigger = document.getElementById('btn-restore-db');
+            var fileInput = document.getElementById('input-restore-db');
+
+            if (btnBackup) {
+                btnBackup.addEventListener('click', function() {
+                    var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dbLocal));
+                    var downloadAnchor = document.createElement('a');
+                    downloadAnchor.setAttribute("href", dataStr);
+                    downloadAnchor.setAttribute("download", `WELLSAVE_PRO_对账数据库备份_${activeDate}.json`);
+                    document.body.appendChild(downloadAnchor);
+                    downloadAnchor.click();
+                    downloadAnchor.remove();
+                    showToast("历史金库数据库导出备份成功！已生成备份文件。", false);
+                });
+            }
+
+            if (btnRestoreTrigger) {
+                btnRestoreTrigger.addEventListener('click', function() {
+                    if (fileInput) fileInput.click();
+                });
+            }
+
+            if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                    var file = e.target.files[0];
+                    if (!file) return;
+
+                    var reader = new FileReader();
+                    reader.onload = function(event) {
+                        try {
+                            var importedDb = JSON.parse(event.target.result);
+                            if (importedDb && typeof importedDb === 'object') {
+                                dbLocal = importedDb;
+                                try {
+                                    localStorage.setItem('wellsave_pro_accounting_exact_db', JSON.stringify(dbLocal));
+                                } catch (e) {}
+                                renderAll();
+                                showToast("对账数据库备份导入成功！数据已完整还原。", false);
+                                
+                                if (typeof window.saveToCloud === 'function') {
+                                    window.saveToCloud();
+                                } else {
+                                    saveToCloud();
+                                }
+                            } else {
+                                showToast("备份格式有误，文件可能已损坏！", true);
+                            }
+                        } catch(err) {
+                            showToast("备份导入出错，请选择有效的 JSON 数据库备份！", true);
+                        }
+                    };
+                    reader.readAsText(file);
+                });
+            }
+        }
+
+        // 面板其它财务控制交互初始化
+        function setupFunctionControls() {
+            var feeRateInput = document.getElementById('s2s-fee-rate');
+            if (feeRateInput) {
+                feeRateInput.addEventListener('input', function(e) {
+                    var val = parseFloat(e.target.value);
+                    if (!isNaN(val) && val >= 0) {
+                        S2S_FEE_RATE = val;
+                        recalculateAllTotals();
+                    }
+                });
+            }
+
+            var hideIdleCheck = document.getElementById('chk-hide-idle');
+            if (hideIdleCheck) {
+                hideIdleCheck.addEventListener('change', function(e) {
+                    hideIdle = e.target.checked;
+                    renderAll();
+                    showToast(hideIdle ? "已智能隐藏未营业收银机行，主副表协同压缩" : "已恢复显示所有收银机行", false);
+                });
+            }
+
+            var btnPrint = document.getElementById('btn-print-report');
+            if (btnPrint) {
+                btnPrint.addEventListener('click', function() {
+                    showToast("正在生成纸质 A4 黑白打印报表...", false);
+                    setTimeout(function() {
+                        window.print(); 
+                    }, 400);
+                });
+            }
+
+            var dateInput = document.getElementById('accounting-date');
+            if (dateInput) {
+                dateInput.addEventListener('change', function(e) {
+                    activeDate = e.target.value;
+                    checkAndInitDateData(activeDate);
+                    renderAll();
+                    showToast(`已成功载入 ${activeDate} 的超市账单报表`, false);
+                });
+            }
+
+            var btnSave = document.getElementById('btn-save-data');
+            if (btnSave) {
+                btnSave.addEventListener('click', function() {
+                    try {
+                        localStorage.setItem('wellsave_pro_accounting_exact_db', JSON.stringify(dbLocal));
+                        showToast("超市账单已保存到本地存储中！", false);
+                    } catch(e) {
+                        showToast("保存失败，本地存储可能受阻！", true);
+                    }
+                });
+            }
+
+            var btnReset = document.getElementById('btn-reset-demo');
+            if (btnReset) {
+                btnReset.addEventListener('click', function() {
+                    dbLocal = JSON.parse(JSON.stringify(initialDataset));
+                    activeDate = "2026-06-04"; 
+                    if (dateInput) dateInput.value = "2026-06-04";
+                    if (feeRateInput) feeRateInput.value = "0.85";
+                    S2S_FEE_RATE = 0.85;
+                    isLocked = false;
+                    hideIdle = false;
+                    if (hideIdleCheck) hideIdleCheck.checked = false;
+                    
+                    var btnLock = document.getElementById('btn-lock-toggle');
+                    if (btnLock) {
+                        btnLock.className = "flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-emerald-600 border border-slate-200 rounded-lg text-xs transition-all";
+                        btnLock.innerHTML = `<i data-lucide="lock-open"></i> <span id="lock-text">正常编辑中</span>`;
+                    }
+                    
+                    try {
+                        localStorage.removeItem('wellsave_pro_accounting_exact_db');
+                    } catch(e) {}
+                    renderAll();
+                    showToast("已重置回 2026-06-04 财务账单初始加载状态", false);
+                    
+                    if (typeof window.saveToCloud === 'function') {
+                        window.saveToCloud();
+                    } else {
+                        saveToCloud();
+                    }
+                });
+            }
+        }
+
+        // Tab页页签切换
+        function setupPageTabs() {
+            var btnReconcile = document.getElementById('tab-reconcile-btn');
+            var btnCollection = document.getElementById('tab-collection-btn');
+            var btnCharts = document.getElementById('tab-charts-btn');
+            
+            var secReconcile = document.getElementById('section-reconcile');
+            var secCollection = document.getElementById('section-collection');
+            var secCharts = document.getElementById('section-charts');
+
+            function clearTabs() {
+                var btns = [btnReconcile, btnCollection, btnCharts];
+                var secs = [secReconcile, secCollection, secCharts];
+                
+                btns.forEach(function(btn) {
+                    if (btn) btn.className = "px-4 py-2 rounded-md text-slate-700 hover:text-slate-900 font-black transition-all flex items-center gap-1 text-[13px] border-2 border-transparent";
+                });
+                
+                secs.forEach(function(sec) {
+                    if (sec) sec.classList.add('hidden');
+                });
+            }
+
+            if (btnReconcile) {
+                btnReconcile.addEventListener('click', function() {
+                    activeTab = "reconcile";
+                    clearTabs();
+                    btnReconcile.className = "px-4 py-2 rounded-md bg-white text-slate-900 font-bold shadow-sm border-2 border-slate-500 transition-all flex items-center gap-1 text-[13px]";
+                    if (secReconcile) secReconcile.classList.remove('hidden');
+                    renderAll();
+                    setTimeout(setupTableKeyNavigation, 50); 
+                });
+            }
+
+            if (btnCollection) {
+                btnCollection.addEventListener('click', function() {
+                    activeTab = "collection";
+                    clearTabs();
+                    btnCollection.className = "px-4 py-2 rounded-md bg-white text-slate-900 font-bold shadow-sm border-2 border-slate-500 transition-all flex items-center gap-1 text-[13px]";
+                    if (secCollection) secCollection.classList.remove('hidden');
+                    renderAll();
+                    setTimeout(setupTableKeyNavigation, 50); 
+                });
+            }
+
+            if (btnCharts) {
+                btnCharts.addEventListener('click', function() {
+                    activeTab = "charts";
+                    clearTabs();
+                    btnCharts.className = "px-4 py-2 rounded-md bg-white text-slate-900 font-bold shadow-sm border-2 border-slate-500 transition-all flex items-center gap-1 text-[13px]";
+                    if (secCharts) secCharts.classList.remove('hidden');
+                    renderAll();
+                });
+            }
+        }
+
+        // 🌟 将事件函数和初始化函数安全地挂载到 window，防止未定义 ReferenceError
+        window.onInputReconcileField = onInputReconcileField;
+        window.onInputCollectionField = onInputCollectionField;
+        window.renderAll = renderAll;
+        window.setupTableKeyNavigation = setupTableKeyNavigation;
+        window.showToast = showToast; 
+        window.saveToCloud = saveToCloud; 
+
+        // 全局键盘监听器
+        setupKeyboardShortcuts();
+
+        // 页面总入口
+        setupPageTabs(); 
+        setupPageActions();
+        setupSafetyLock();
+        setupDataBackupAndRestore();
+        setupFunctionControls();
+        setupAuthListeners(); // 🌟 挂载安全账户拦截机制
+
+        // 默认载入 6-4 账目并绘图
+        var dateInput = document.getElementById('accounting-date');
+        if (dateInput) dateInput.value = activeDate;
+        renderAll();
+    </script>
+</body>
+</html>
