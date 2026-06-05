@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wellsave Pro - 超市每日 point cash 结算对账系统</title>
+    <link rel="icon" type="image/webp" href="assets/logo.webp">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -146,12 +147,16 @@
     <script>
         window.fallbackLogo = function() {
             var container = document.getElementById('logo-container');
-            if (container) {
-                container.innerHTML = '<div class="p-1 bg-slate-200 text-slate-700 rounded-lg"><i data-lucide="store" class="w-5 h-5"></i></div>';
+            if (!container || container.dataset.fallbackApplied === 'true') return;
+            container.dataset.fallbackApplied = 'true';
+            container.innerHTML = '<div class="p-1 bg-slate-200 text-slate-700 rounded-lg"><i data-lucide="store" class="w-5 h-5"></i></div>';
+            (function renderIcons() {
                 if (typeof lucide !== 'undefined') {
-                    lucide.createIcons(); 
+                    lucide.createIcons();
+                } else {
+                    setTimeout(renderIcons, 100);
                 }
-            }
+            })();
         };
     </script>
 </head>
@@ -160,8 +165,11 @@
     <!-- 🌟 全屏安全登录锁屏闸口，阻断一切非授权设备访问（最高层级 z-[100]） -->
     <div id="login-overlay" class="fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center">
         <div class="bg-white border border-slate-300 p-8 rounded-2xl max-w-sm w-full mx-4 shadow-2xl text-center">
-            <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-                <i data-lucide="shield-check" class="w-8 h-8"></i>
+            <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner overflow-hidden border-2 border-emerald-200 bg-white">
+                <img src="assets/logo.webp" alt="Wellsave Pro Logo" class="w-full h-full object-cover" onerror="this.onerror=null;this.src='';this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden');this.nextElementSibling.classList.add('flex');">
+                <div class="hidden w-full h-full bg-emerald-100 text-emerald-600 items-center justify-center">
+                    <i data-lucide="shield-check" class="w-8 h-8"></i>
+                </div>
             </div>
             <h2 class="text-xl font-black text-slate-900 mb-1">Wellsave Pro 对账中心</h2>
             <p class="text-xs text-slate-500 mb-6">请输入专属对账凭证解锁财务工作台</p>
@@ -196,7 +204,7 @@
             <div class="flex items-center gap-2">
                 <!-- 智能 LOGO 容器 -->
                 <div id="logo-container" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg overflow-hidden border border-slate-300">
-                    <img src="https://picui.ogmua.cn/s1/2026/06/04/6a218467e1e7b.webp" alt="Wellsave Pro Logo" class="w-full h-full object-cover" id="logo-img" onerror="fallbackLogo()">
+                    <img src="assets/logo.webp" alt="Wellsave Pro Logo" class="w-full h-full object-cover" id="logo-img" onerror="fallbackLogo()">
                 </div>
                 <div>
                     <h1 class="text-lg font-black tracking-wider text-slate-900 leading-none">Wellsave Pro 对账系统</h1>
@@ -549,6 +557,41 @@
             }, 3000);
         }
 
+        // 兼容数组与 Firestore 对象格式的收款列求和
+        function sumCollectionValues(cols) {
+            var total = 0;
+            if (!cols) return total;
+            if (typeof cols.forEach === 'function') {
+                cols.forEach(function(v) { total += parseFloat(v || 0); });
+            } else if (typeof cols === 'object') {
+                for (var k in cols) {
+                    if (Object.prototype.hasOwnProperty.call(cols, k)) {
+                        total += parseFloat(cols[k] || 0);
+                    }
+                }
+            }
+            return total;
+        }
+
+        // 按日期订阅云端快照（闭包锁定 dateStr，防止结转后旧监听覆盖新日期数据）
+        function subscribeCloudForDate(dateStr) {
+            if (!isFirebaseReady || !currentUser) return;
+            if (cloudUnsubscribe) cloudUnsubscribe();
+            var subscribedDate = dateStr;
+            var docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dailyReconciliations', subscribedDate);
+            cloudUnsubscribe = onSnapshot(docRef, function(docSnapshot) {
+                if (localStorage.getItem('wellsave_authorized') === 'true' && docSnapshot.exists()) {
+                    dbLocal[subscribedDate] = docSnapshot.data();
+                    if (subscribedDate === activeDate) {
+                        recalculateAllTotals();
+                        renderAll();
+                    }
+                }
+            }, function(error) {
+                console.error("云端实时同步监听异常: ", error);
+            });
+        }
+
         // 确保特定日期的数据库实体已被初始化 (固定 12 台机)
         function checkAndInitDateData(dateStr) {
             if (!dbLocal[dateStr]) {
@@ -578,12 +621,7 @@
             var rec = data.reconciliations[m];
             var cols = data.collections[m];
 
-            var todayCollection = 0;
-            if (cols && cols.forEach) {
-                cols.forEach(function(val) {
-                    todayCollection += parseFloat(val || 0);
-                });
-            }
+            var todayCollection = sumCollectionValues(cols);
 
             // 判断机台今日是否开启/活跃
             var isActive = (parseFloat(rec.revenue || 0) !== 0) || 
@@ -660,12 +698,7 @@
         // 局部子表小计渲染
         function recalculateCollectionRowDOM(m) {
             var cols = dbLocal[activeDate].collections[m];
-            var rowSum = 0;
-            if (cols && cols.forEach) {
-                cols.forEach(function(val) {
-                    rowSum += parseFloat(val || 0);
-                });
-            }
+            var rowSum = sumCollectionValues(cols);
             var sumEl = document.getElementById(`cell-col-sum-${m}`);
             if (sumEl) sumEl.innerText = rowSum.toFixed(2);
         }
@@ -995,10 +1028,7 @@
                 
                 // 如果开启了隐藏未营业机台，子表也同步隐藏
                 if (hideIdle) {
-                    var rowSum = 0;
-                    if (cols && cols.forEach) {
-                        cols.forEach(function(v) { rowSum += parseFloat(v || 0); });
-                    }
+                    var rowSum = sumCollectionValues(cols);
                     var rec = data.reconciliations[m];
                     var activeFlow = parseFloat(rec.revenue || 0) + 
                                        parseFloat(rec.shop2shop || 0) + 
@@ -1011,12 +1041,7 @@
                     }
                 }
 
-                var rowSum = 0;
-                if (cols && cols.forEach) {
-                    cols.forEach(function(v) { rowSum += parseFloat(v || 0); });
-                }
-
-                var tr = document.createElement('tr');
+                var rowSum = sumCollectionValues(cols);
                 tr.id = `collection-row-${m}`;
                 tr.className = "hover:bg-slate-50 transition-colors border-b border-slate-200";
                 
@@ -1058,18 +1083,31 @@
             setupTableKeyNavigation(); 
         }
 
+        // 立即写入指定日期（结转等关键操作使用，避免 debounce 互相覆盖）
+        function saveDateToCloudImmediate(dateStr) {
+            if (!isFirebaseReady || !currentUser || !dbLocal[dateStr]) {
+                return Promise.resolve();
+            }
+            var docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dailyReconciliations', dateStr);
+            return setDoc(docRef, dbLocal[dateStr]);
+        }
+
         // 云端同步写回 (🌟 智能去抖 Debounce 防写入踩踏，多人协同极佳)
-        function saveToCloud() {
+        function saveToCloud(targetDate, silent) {
             if (!isFirebaseReady || !currentUser) return;
-            
+            var dateToSave = targetDate || activeDate;
+            if (!dbLocal[dateToSave]) return;
+
             // 每次打字时，清除前一次的未执行保存，防多设备卡顿踩踏
             if (writeTimeout) clearTimeout(writeTimeout);
             
-            writeTimeout = setTimeout(() => {
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dailyReconciliations', activeDate);
-                setDoc(docRef, dbLocal[activeDate]).then(() => {
-                    showToast("点钞协同数据已安全自动秒级云同步！", false);
-                }).catch(err => {
+            writeTimeout = setTimeout(function() {
+                var docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dailyReconciliations', dateToSave);
+                setDoc(docRef, dbLocal[dateToSave]).then(function() {
+                    if (!silent) {
+                        showToast("点钞协同数据已安全自动秒级云同步！", false);
+                    }
+                }).catch(function(err) {
                     console.error("云端实时保存失败: ", err);
                 });
             }, 500); // 500毫秒去抖动时间
@@ -1318,19 +1356,7 @@
             onAuthStateChanged(auth, (user) => {
                 currentUser = user;
                 if (user) {
-                    // 云端连接稳定，开启多设备协同快照监听
-                    if (cloudUnsubscribe) cloudUnsubscribe();
-                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dailyReconciliations', activeDate);
-                    cloudUnsubscribe = onSnapshot(docRef, (docSnapshot) => {
-                        // 仅在本地授权进入后才接受云快照覆盖，防止泄密
-                        if (localStorage.getItem('wellsave_authorized') === 'true' && docSnapshot.exists()) {
-                            dbLocal[activeDate] = docSnapshot.data();
-                            recalculateAllTotals();
-                            renderAll();
-                        }
-                    }, (error) => {
-                        console.error("云端实时同步监听异常: ", error);
-                    });
+                    subscribeCloudForDate(activeDate);
                 }
             });
         }
@@ -1359,12 +1385,9 @@
 
                     for (var m = 1; m <= 12; m++) {
                         var rec = data.reconciliations[m];
+                        if (!rec) continue;
                         var cols = data.collections[m];
-                        
-                        var totalCashDrop = 0;
-                        if (cols && cols.forEach) {
-                            cols.forEach(function(v) { totalCashDrop += parseFloat(v || 0); });
-                        }
+                        var totalCashDrop = sumCollectionValues(cols);
                         
                         var activeFlow = parseFloat(rec.revenue || 0) + 
                                            parseFloat(rec.shop2shop || 0) + 
@@ -1445,6 +1468,7 @@
                     var data = dbLocal[activeDate];
 
                     if (currentAction === "roll") {
+                        var previousDate = activeDate;
                         // 🌟 时区安全的字符串解析与日期累加
                         var parts = activeDate.split('-');
                         var currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
@@ -1460,13 +1484,10 @@
 
                         for (var m = 1; m <= 12; m++) {
                             var rec = data.reconciliations[m];
+                            if (!rec) continue;
                             var cols = data.collections[m];
                             var tomorrowRec = tomorrowData.reconciliations[m];
-                            
-                            var totalCashDrop = 0;
-                            if (cols && cols.forEach) {
-                                cols.forEach(function(v) { totalCashDrop += parseFloat(v || 0); });
-                            }
+                            var totalCashDrop = sumCollectionValues(cols);
                             
                             var activeFlow = parseFloat(rec.revenue || 0) + 
                                                parseFloat(rec.shop2shop || 0) + 
@@ -1490,14 +1511,18 @@
                             localStorage.setItem('wellsave_pro_accounting_exact_db', JSON.stringify(dbLocal));
                         } catch(e) {}
                         
+                        subscribeCloudForDate(nextDateStr);
                         renderAll();
                         showToast(`结转明天成功！日期已自动切换至：${nextDateStr}，今日底数已全部结转为期初备用金。`, false);
                         
-                        if (typeof window.saveToCloud === 'function') {
-                            window.saveToCloud();
-                        } else {
-                            saveToCloud();
-                        }
+                        if (writeTimeout) clearTimeout(writeTimeout);
+                        writeTimeout = null;
+                        Promise.all([
+                            saveDateToCloudImmediate(nextDateStr),
+                            saveDateToCloudImmediate(previousDate)
+                        ]).catch(function(err) {
+                            console.error("结转云端同步失败: ", err);
+                        });
                         
                     } else if (currentAction === "clear") {
                         for (var m = 1; m <= 12; m++) {
@@ -1658,6 +1683,7 @@
                 dateInput.addEventListener('change', function(e) {
                     activeDate = e.target.value;
                     checkAndInitDateData(activeDate);
+                    subscribeCloudForDate(activeDate);
                     renderAll();
                     showToast(`已成功载入 ${activeDate} 的超市账单报表`, false);
                 });
