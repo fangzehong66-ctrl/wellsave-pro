@@ -469,6 +469,7 @@
         let currentUser = null;
         let cloudUnsubscribe = null;
         let writeTimeout = null; // 🌟 智能写入去抖防抖定时器
+        let suppressCloudSnapshot = false; // 结转写入期间忽略云端快照，防止覆盖本地数据
 
         // 检测环境并加载 Firebase
         try {
@@ -557,6 +558,11 @@
             }, 3000);
         }
 
+        // 日期补零（结转明日必需）
+        function padZero(num) {
+            return num < 10 ? '0' + num : String(num);
+        }
+
         // 兼容数组与 Firestore 对象格式的收款列求和
         function sumCollectionValues(cols) {
             var total = 0;
@@ -580,6 +586,7 @@
             var subscribedDate = dateStr;
             var docRef = doc(db, 'artifacts', appId, 'public', 'data', 'dailyReconciliations', subscribedDate);
             cloudUnsubscribe = onSnapshot(docRef, function(docSnapshot) {
+                if (suppressCloudSnapshot) return;
                 if (localStorage.getItem('wellsave_authorized') === 'true' && docSnapshot.exists()) {
                     dbLocal[subscribedDate] = docSnapshot.data();
                     if (subscribedDate === activeDate) {
@@ -1463,88 +1470,95 @@
 
             if (btnOk) {
                 btnOk.addEventListener('click', function() {
+                    var action = currentAction;
                     if (modal) modal.classList.add('hidden');
-                    checkAndInitDateData(activeDate);
-                    var data = dbLocal[activeDate];
+                    currentAction = null;
 
-                    if (currentAction === "roll") {
-                        var previousDate = activeDate;
-                        // 🌟 时区安全的字符串解析与日期累加
-                        var parts = activeDate.split('-');
-                        var currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-                        currentDate.setDate(currentDate.getDate() + 1); 
-                        
-                        var nextY = currentDate.getFullYear();
-                        var nextM = padZero(currentDate.getMonth() + 1);
-                        var nextD = padZero(currentDate.getDate());
-                        var nextDateStr = nextY + '-' + nextM + '-' + nextD;
+                    if (!action) return;
 
-                        checkAndInitDateData(nextDateStr);
-                        var tomorrowData = dbLocal[nextDateStr];
+                    try {
+                        checkAndInitDateData(activeDate);
+                        var data = dbLocal[activeDate];
 
-                        for (var m = 1; m <= 12; m++) {
-                            var rec = data.reconciliations[m];
-                            if (!rec) continue;
-                            var cols = data.collections[m];
-                            var tomorrowRec = tomorrowData.reconciliations[m];
-                            var totalCashDrop = sumCollectionValues(cols);
-                            
-                            var activeFlow = parseFloat(rec.revenue || 0) + 
-                                               parseFloat(rec.shop2shop || 0) + 
-                                               parseFloat(rec.absa || 0) + 
-                                               parseFloat(rec.lottery || 0) + 
-                                               parseFloat(rec.added || 0) + 
-                                               totalCashDrop;
+                        if (action === "roll") {
+                            var previousDate = activeDate;
+                            var parts = activeDate.split('-');
+                            var currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                            currentDate.setDate(currentDate.getDate() + 1);
 
-                            if (activeFlow > 0) {
-                                tomorrowRec.prevFloat = parseFloat(rec.currFloat || 0);
-                            } else {
-                                tomorrowRec.prevFloat = parseFloat(rec.prevFloat || 0);
+                            var nextDateStr = currentDate.getFullYear() + '-' + padZero(currentDate.getMonth() + 1) + '-' + padZero(currentDate.getDate());
+
+                            checkAndInitDateData(nextDateStr);
+                            var tomorrowData = dbLocal[nextDateStr];
+
+                            for (var m = 1; m <= 12; m++) {
+                                var rec = data.reconciliations[m] || data.reconciliations[String(m)];
+                                if (!rec) continue;
+                                var cols = data.collections[m] || data.collections[String(m)];
+                                var tomorrowRec = tomorrowData.reconciliations[m] || tomorrowData.reconciliations[String(m)];
+                                if (!tomorrowRec) continue;
+                                var totalCashDrop = sumCollectionValues(cols);
+
+                                var activeFlow = parseFloat(rec.revenue || 0) +
+                                    parseFloat(rec.shop2shop || 0) +
+                                    parseFloat(rec.absa || 0) +
+                                    parseFloat(rec.lottery || 0) +
+                                    parseFloat(rec.added || 0) +
+                                    totalCashDrop;
+
+                                if (activeFlow > 0) {
+                                    tomorrowRec.prevFloat = parseFloat(rec.currFloat || 0);
+                                } else {
+                                    tomorrowRec.prevFloat = parseFloat(rec.prevFloat || 0);
+                                }
                             }
-                        }
 
-                        activeDate = nextDateStr;
-                        var dateInput = document.getElementById('accounting-date');
-                        if (dateInput) dateInput.value = nextDateStr;
-                        
-                        try {
-                            localStorage.setItem('wellsave_pro_accounting_exact_db', JSON.stringify(dbLocal));
-                        } catch(e) {}
-                        
-                        subscribeCloudForDate(nextDateStr);
-                        renderAll();
-                        showToast(`结转明天成功！日期已自动切换至：${nextDateStr}，今日底数已全部结转为期初备用金。`, false);
-                        
-                        if (writeTimeout) clearTimeout(writeTimeout);
-                        writeTimeout = null;
-                        Promise.all([
-                            saveDateToCloudImmediate(nextDateStr),
-                            saveDateToCloudImmediate(previousDate)
-                        ]).catch(function(err) {
-                            console.error("结转云端同步失败: ", err);
-                        });
-                        
-                    } else if (currentAction === "clear") {
-                        for (var m = 1; m <= 12; m++) {
-                            var rec = data.reconciliations[m];
-                            rec.revenue = 0;
-                            rec.lottery = 0;
-                            rec.shop2shop = 0;
-                            rec.absa = 0;
-                            rec.added = 0;
-                            data.collections[m] = [0, 0, 0, 0, 0];
-                        }
-                        renderAll();
-                        showToast("今日账目销售数据已清零，收银备用金已留存不变。", false);
-                        
-                        if (typeof window.saveToCloud === 'function') {
-                            window.saveToCloud();
-                        } else {
+                            activeDate = nextDateStr;
+                            var dateInput = document.getElementById('accounting-date');
+                            if (dateInput) dateInput.value = nextDateStr;
+
+                            try {
+                                localStorage.setItem('wellsave_pro_accounting_exact_db', JSON.stringify(dbLocal));
+                            } catch (e) {}
+
+                            suppressCloudSnapshot = true;
+                            renderAll();
+                            showToast('结转明天成功！日期已自动切换至：' + nextDateStr + '，今日底数已全部结转为期初备用金。', false);
+
+                            if (writeTimeout) clearTimeout(writeTimeout);
+                            writeTimeout = null;
+                            Promise.all([
+                                saveDateToCloudImmediate(nextDateStr),
+                                saveDateToCloudImmediate(previousDate)
+                            ]).then(function() {
+                                subscribeCloudForDate(nextDateStr);
+                            }).catch(function(err) {
+                                console.error("结转云端同步失败: ", err);
+                                subscribeCloudForDate(nextDateStr);
+                                showToast('结转已完成，但云端同步失败，请检查网络后点「保存」。', true);
+                            }).finally(function() {
+                                suppressCloudSnapshot = false;
+                            });
+
+                        } else if (action === "clear") {
+                            for (var m2 = 1; m2 <= 12; m2++) {
+                                var rec2 = data.reconciliations[m2];
+                                if (!rec2) continue;
+                                rec2.revenue = 0;
+                                rec2.lottery = 0;
+                                rec2.shop2shop = 0;
+                                rec2.absa = 0;
+                                rec2.added = 0;
+                                data.collections[m2] = [0, 0, 0, 0, 0];
+                            }
+                            renderAll();
+                            showToast("今日账目销售数据已清零，收银备用金已留存不变。", false);
                             saveToCloud();
                         }
+                    } catch (err) {
+                        console.error("结转操作失败: ", err);
+                        showToast('结转失败：' + (err && err.message ? err.message : '未知错误'), true);
                     }
-
-                    currentAction = null;
                 });
             }
         }
